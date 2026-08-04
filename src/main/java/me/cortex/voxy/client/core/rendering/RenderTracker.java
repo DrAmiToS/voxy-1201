@@ -17,6 +17,7 @@ public class RenderTracker {
     private RenderGenerationService renderGen;
     private final AbstractFarWorldRenderer renderer;
     private final LongSet[] sets;
+    private final LongSet pendingIncDeletes = new LongOpenHashSet();
 
 
     public RenderTracker(WorldEngine world, AbstractFarWorldRenderer renderer) {
@@ -88,7 +89,11 @@ public class RenderTracker {
         this.remove(WorldEngine.getWorldSectionId(lvl-1, (x<<1)+1, (y<<1), (z<<1)+1));
         this.remove(WorldEngine.getWorldSectionId(lvl-1, (x<<1)+1, (y<<1)+1, (z<<1)));
         this.remove(WorldEngine.getWorldSectionId(lvl-1, (x<<1)+1, (y<<1)+1, (z<<1)+1));
-        this.put(WorldEngine.getWorldSectionId(lvl, x, y, z));
+        long parentKey = WorldEngine.getWorldSectionId(lvl, x, y, z);
+        this.put(parentKey);
+        synchronized (this.pendingIncDeletes) {
+            this.pendingIncDeletes.add(parentKey);
+        }
 
         //TODO: make a seperate object to hold the build data and link it with the location in a
         // concurrent hashmap or something, this is so that e.g. the build data position
@@ -96,16 +101,6 @@ public class RenderTracker {
 
         //TODO: replace this:: with a class cached lambda ref (cause doing this:: still does a lambda allocation)
         this.renderGen.enqueueTask(lvl, x, y, z, this::shouldStillBuild);
-
-        this.renderer.enqueueResult(new BuiltSection(WorldEngine.getWorldSectionId(lvl-1, (x<<1), (y<<1), (z<<1))));
-        this.renderer.enqueueResult(new BuiltSection(WorldEngine.getWorldSectionId(lvl-1, (x<<1), (y<<1), (z<<1)+1)));
-        this.renderer.enqueueResult(new BuiltSection(WorldEngine.getWorldSectionId(lvl-1, (x<<1), (y<<1)+1, (z<<1))));
-        this.renderer.enqueueResult(new BuiltSection(WorldEngine.getWorldSectionId(lvl-1, (x<<1), (y<<1)+1, (z<<1)+1)));
-        this.renderer.enqueueResult(new BuiltSection(WorldEngine.getWorldSectionId(lvl-1, (x<<1)+1, (y<<1), (z<<1))));
-        this.renderer.enqueueResult(new BuiltSection(WorldEngine.getWorldSectionId(lvl-1, (x<<1)+1, (y<<1), (z<<1)+1)));
-        this.renderer.enqueueResult(new BuiltSection(WorldEngine.getWorldSectionId(lvl-1, (x<<1)+1, (y<<1)+1, (z<<1))));
-        this.renderer.enqueueResult(new BuiltSection(WorldEngine.getWorldSectionId(lvl-1, (x<<1)+1, (y<<1)+1, (z<<1)+1)));
-
 
         this.renderGen.removeTask(lvl-1, (x<<1), (y<<1), (z<<1));
         this.renderGen.removeTask(lvl-1, (x<<1), (y<<1), (z<<1)+1);
@@ -127,9 +122,13 @@ public class RenderTracker {
         this.put(WorldEngine.getWorldSectionId(lvl-1, (x<<1)+1, (y<<1), (z<<1)+1));
         this.put(WorldEngine.getWorldSectionId(lvl-1, (x<<1)+1, (y<<1)+1, (z<<1)));
         this.put(WorldEngine.getWorldSectionId(lvl-1, (x<<1)+1, (y<<1)+1, (z<<1)+1));
-        this.remove(WorldEngine.getWorldSectionId(lvl, x, y, z));
+        long parentKey = WorldEngine.getWorldSectionId(lvl, x, y, z);
+        this.remove(parentKey);
+        synchronized (this.pendingIncDeletes) {
+            this.pendingIncDeletes.remove(parentKey);
+        }
 
-        this.renderer.enqueueResult(new BuiltSection(WorldEngine.getWorldSectionId(lvl, x, y, z)));
+        this.renderer.enqueueResult(new BuiltSection(parentKey));
         this.renderGen.removeTask(lvl, x, y, z);
 
         //TODO: replace this:: with a class cached lambda ref (cause doing this:: still does a lambda allocation)
@@ -194,9 +193,36 @@ public class RenderTracker {
     public void processBuildResult(BuiltSection section) {
         //Check that we still want the section
         if (this.contains(section.position)) {
+            if (this.consumePendingIncDelete(section.position)) {
+                this.enqueueChildDeletes(section.position);
+            }
             this.renderer.enqueueResult(section);
         } else {
             section.free();
+        }
+    }
+
+    private boolean consumePendingIncDelete(long parentKey) {
+        synchronized (this.pendingIncDeletes) {
+            return this.pendingIncDeletes.remove(parentKey);
+        }
+    }
+
+    private void enqueueChildDeletes(long parentKey) {
+        int lvl = WorldEngine.getLevel(parentKey);
+        if (lvl == 0) {
+            return;
+        }
+        int childLvl = lvl - 1;
+        int x = WorldEngine.getX(parentKey) << 1;
+        int y = WorldEngine.getY(parentKey) << 1;
+        int z = WorldEngine.getZ(parentKey) << 1;
+        for (int dx = 0; dx < 2; dx++) {
+            for (int dy = 0; dy < 2; dy++) {
+                for (int dz = 0; dz < 2; dz++) {
+                    this.renderer.enqueueResult(new BuiltSection(WorldEngine.getWorldSectionId(childLvl, x + dx, y + dy, z + dz)));
+                }
+            }
         }
     }
 
