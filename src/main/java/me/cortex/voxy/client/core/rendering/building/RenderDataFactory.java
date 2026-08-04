@@ -11,8 +11,6 @@ import me.cortex.voxy.common.world.other.Mapper;
 import net.minecraft.block.FluidBlock;
 import org.lwjgl.system.MemoryUtil;
 
-import java.lang.reflect.Array;
-
 
 public class RenderDataFactory {
     private final WorldEngine world;

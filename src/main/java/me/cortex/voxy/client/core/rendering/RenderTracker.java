@@ -8,16 +8,11 @@ import me.cortex.voxy.client.core.rendering.building.BuiltSection;
 import me.cortex.voxy.client.core.rendering.building.RenderGenerationService;
 import me.cortex.voxy.common.world.WorldEngine;
 import me.cortex.voxy.common.world.WorldSection;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.util.math.Direction;
-
-import java.util.concurrent.ConcurrentHashMap;
 
 //Tracks active sections, dispatches updates to the build system, everything related to rendering flows through here
 public class RenderTracker {
     private static final int DEC_CHILDREN_BEFORE_PARENT_DELETE = 1;
 
-    private final WorldEngine world;
     private RenderGenerationService renderGen;
     private final AbstractFarWorldRenderer renderer;
     private final LongSet[] sets;
@@ -27,7 +22,6 @@ public class RenderTracker {
 
 
     public RenderTracker(WorldEngine world, AbstractFarWorldRenderer renderer) {
-        this.world = world;
         this.renderer = renderer;
         this.sets = new LongSet[1<<4];
         for (int i = 0; i < this.sets.length; i++) {

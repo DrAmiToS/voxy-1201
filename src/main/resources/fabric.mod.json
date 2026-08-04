@@ -3,7 +3,7 @@
   "id": "voxy",
   "version": "${version}",
   "name": "Voxy",
-  "description": "Far distance rendering mod utilising LoDs",
+  "description": "Far distance rendering mod utilising LoDs. Ported to Minecraft 1.20.1 for the westoris.ru project.",
   "authors": [
     "Cortex"
   ],
