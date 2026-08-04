@@ -278,7 +278,7 @@ public class ModelTextureBakery {
                 public int getBottomY() {
                     return 0;
                 }
-            }, bb, state, state.getFluidState());
+            }, new BakeryVertexConsumer(bb), state, state.getFluidState());
         }
 
         glBindTexture(GL_TEXTURE_2D, textureId);
@@ -313,6 +313,75 @@ public class ModelTextureBakery {
                     builder.vertex(matrix, x, y, z).texture(u, v).color(255, 255, 255, 255).next();
                 }
             }
+        }
+    }
+
+    private static final class BakeryVertexConsumer implements VertexConsumer {
+        private final BufferBuilder builder;
+        private double x;
+        private double y;
+        private double z;
+        private int red = 255;
+        private int green = 255;
+        private int blue = 255;
+        private int alpha = 255;
+        private float u;
+        private float v;
+
+        private BakeryVertexConsumer(BufferBuilder builder) {
+            this.builder = builder;
+        }
+
+        @Override
+        public VertexConsumer vertex(double x, double y, double z) {
+            this.x = x;
+            this.y = y;
+            this.z = z;
+            return this;
+        }
+
+        @Override
+        public VertexConsumer color(int red, int green, int blue, int alpha) {
+            this.red = red;
+            this.green = green;
+            this.blue = blue;
+            this.alpha = alpha;
+            return this;
+        }
+
+        @Override
+        public VertexConsumer texture(float u, float v) {
+            this.u = u;
+            this.v = v;
+            return this;
+        }
+
+        @Override
+        public VertexConsumer overlay(int u, int v) {
+            return this;
+        }
+
+        @Override
+        public VertexConsumer light(int u, int v) {
+            return this;
+        }
+
+        @Override
+        public VertexConsumer normal(float x, float y, float z) {
+            return this;
+        }
+
+        @Override
+        public void next() {
+            this.builder.vertex(this.x, this.y, this.z).texture(this.u, this.v).color(this.red, this.green, this.blue, this.alpha).next();
+        }
+
+        @Override
+        public void fixedColor(int red, int green, int blue, int alpha) {
+        }
+
+        @Override
+        public void unfixColor() {
         }
     }
 
