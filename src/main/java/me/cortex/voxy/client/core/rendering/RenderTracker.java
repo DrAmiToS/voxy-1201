@@ -15,6 +15,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 //Tracks active sections, dispatches updates to the build system, everything related to rendering flows through here
 public class RenderTracker {
+    private static final int DEC_CHILDREN_BEFORE_PARENT_DELETE = 1;
+
     private final WorldEngine world;
     private RenderGenerationService renderGen;
     private final AbstractFarWorldRenderer renderer;
@@ -131,7 +133,7 @@ public class RenderTracker {
         this.remove(parentKey);
         synchronized (this) {
             this.pendingIncDeletes.remove(parentKey);
-            this.pendingDecCounts.put(parentKey, 8);
+            this.pendingDecCounts.put(parentKey, DEC_CHILDREN_BEFORE_PARENT_DELETE);
         }
 
         this.renderGen.removeTask(lvl, x, y, z);
@@ -226,7 +228,7 @@ public class RenderTracker {
             }
             int remaining = this.pendingDecCounts.addTo(parentKey, -1) - 1;
             if (remaining <= 0) {
-                this.pendingDecCounts.remove(parentKey);
+                this.clearPendingDec(parentKey);
                 return parentKey;
             }
             return 0;
