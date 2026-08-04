@@ -297,12 +297,21 @@ public class ModelTextureBakery {
     }
 
     private static void renderQuads(BufferBuilder builder, BlockState state, BakedModel model, MatrixStack stack, long randomValue) {
+        var matrix = stack.peek().getPositionMatrix();
         for (Direction direction : new Direction[]{Direction.DOWN, Direction.UP, Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST, null}) {
             var quads = model.getQuads(state, direction, new LocalRandom(randomValue));
             for (var quad : quads) {
-                //TODO: mark pixels that have
-                int meta = quad.hasColor()?1:0;
-                builder.quad(stack.peek(), quad, 255f/((meta>>16)&0xff), 255f/((meta>>8)&0xff), 255f/(meta&0xff), 0, 0);
+                int[] vertexData = quad.getVertexData();
+                int stride = vertexData.length / 4;
+                for (int vertex = 0; vertex < 4; vertex++) {
+                    int offset = vertex * stride;
+                    float x = Float.intBitsToFloat(vertexData[offset]);
+                    float y = Float.intBitsToFloat(vertexData[offset + 1]);
+                    float z = Float.intBitsToFloat(vertexData[offset + 2]);
+                    float u = Float.intBitsToFloat(vertexData[offset + 4]);
+                    float v = Float.intBitsToFloat(vertexData[offset + 5]);
+                    builder.vertex(matrix, x, y, z).texture(u, v).color(255, 255, 255, 255).next();
+                }
             }
         }
     }
