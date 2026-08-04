@@ -1,5 +1,7 @@
 package me.cortex.voxy.client.core.rendering;
 
+import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
+import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import me.cortex.voxy.client.core.rendering.building.BuiltSection;
@@ -18,6 +20,8 @@ public class RenderTracker {
     private final AbstractFarWorldRenderer renderer;
     private final LongSet[] sets;
     private final LongSet pendingIncDeletes = new LongOpenHashSet();
+    private final Long2LongOpenHashMap pendingDecParents = new Long2LongOpenHashMap();
+    private final Long2IntOpenHashMap pendingDecCounts = new Long2IntOpenHashMap();
 
 
     public RenderTracker(WorldEngine world, AbstractFarWorldRenderer renderer) {
@@ -91,8 +95,9 @@ public class RenderTracker {
         this.remove(WorldEngine.getWorldSectionId(lvl-1, (x<<1)+1, (y<<1)+1, (z<<1)+1));
         long parentKey = WorldEngine.getWorldSectionId(lvl, x, y, z);
         this.put(parentKey);
-        synchronized (this.pendingIncDeletes) {
+        synchronized (this) {
             this.pendingIncDeletes.add(parentKey);
+            this.clearPendingDec(parentKey);
         }
 
         //TODO: make a seperate object to hold the build data and link it with the location in a
@@ -124,22 +129,22 @@ public class RenderTracker {
         this.put(WorldEngine.getWorldSectionId(lvl-1, (x<<1)+1, (y<<1)+1, (z<<1)+1));
         long parentKey = WorldEngine.getWorldSectionId(lvl, x, y, z);
         this.remove(parentKey);
-        synchronized (this.pendingIncDeletes) {
+        synchronized (this) {
             this.pendingIncDeletes.remove(parentKey);
+            this.pendingDecCounts.put(parentKey, 8);
         }
 
-        this.renderer.enqueueResult(new BuiltSection(parentKey));
         this.renderGen.removeTask(lvl, x, y, z);
 
         //TODO: replace this:: with a class cached lambda ref (cause doing this:: still does a lambda allocation)
-        this.renderGen.enqueueTask(lvl - 1, (x<<1), (y<<1), (z<<1), this::shouldStillBuild);
-        this.renderGen.enqueueTask(lvl - 1, (x<<1), (y<<1), (z<<1)+1, this::shouldStillBuild);
-        this.renderGen.enqueueTask(lvl - 1, (x<<1), (y<<1)+1, (z<<1), this::shouldStillBuild);
-        this.renderGen.enqueueTask(lvl - 1, (x<<1), (y<<1)+1, (z<<1)+1, this::shouldStillBuild);
-        this.renderGen.enqueueTask(lvl - 1, (x<<1)+1, (y<<1), (z<<1), this::shouldStillBuild);
-        this.renderGen.enqueueTask(lvl - 1, (x<<1)+1, (y<<1), (z<<1)+1, this::shouldStillBuild);
-        this.renderGen.enqueueTask(lvl - 1, (x<<1)+1, (y<<1)+1, (z<<1), this::shouldStillBuild);
-        this.renderGen.enqueueTask(lvl - 1, (x<<1)+1, (y<<1)+1, (z<<1)+1, this::shouldStillBuild);
+        this.enqueueDecChild(parentKey, lvl - 1, (x<<1), (y<<1), (z<<1));
+        this.enqueueDecChild(parentKey, lvl - 1, (x<<1), (y<<1), (z<<1)+1);
+        this.enqueueDecChild(parentKey, lvl - 1, (x<<1), (y<<1)+1, (z<<1));
+        this.enqueueDecChild(parentKey, lvl - 1, (x<<1), (y<<1)+1, (z<<1)+1);
+        this.enqueueDecChild(parentKey, lvl - 1, (x<<1)+1, (y<<1), (z<<1));
+        this.enqueueDecChild(parentKey, lvl - 1, (x<<1)+1, (y<<1), (z<<1)+1);
+        this.enqueueDecChild(parentKey, lvl - 1, (x<<1)+1, (y<<1)+1, (z<<1));
+        this.enqueueDecChild(parentKey, lvl - 1, (x<<1)+1, (y<<1)+1, (z<<1)+1);
     }
 
     //Enqueues a renderTask for a section to cache the result
@@ -196,16 +201,63 @@ public class RenderTracker {
             if (this.consumePendingIncDelete(section.position)) {
                 this.enqueueChildDeletes(section.position);
             }
+            var parentDelete = this.consumePendingDecChild(section.position);
+            if (parentDelete != 0) {
+                this.renderer.enqueueResult(new BuiltSection(parentDelete));
+            }
             this.renderer.enqueueResult(section);
         } else {
+            this.consumePendingDecChild(section.position);
             section.free();
         }
     }
 
     private boolean consumePendingIncDelete(long parentKey) {
-        synchronized (this.pendingIncDeletes) {
+        synchronized (this) {
             return this.pendingIncDeletes.remove(parentKey);
         }
+    }
+
+    private long consumePendingDecChild(long childKey) {
+        synchronized (this) {
+            long parentKey = this.pendingDecParents.remove(childKey);
+            if (parentKey == 0) {
+                return 0;
+            }
+            int remaining = this.pendingDecCounts.addTo(parentKey, -1) - 1;
+            if (remaining <= 0) {
+                this.pendingDecCounts.remove(parentKey);
+                return parentKey;
+            }
+            return 0;
+        }
+    }
+
+    private void clearPendingDec(long parentKey) {
+        this.pendingDecCounts.remove(parentKey);
+        int lvl = WorldEngine.getLevel(parentKey);
+        if (lvl == 0) {
+            return;
+        }
+        int childLvl = lvl - 1;
+        int x = WorldEngine.getX(parentKey) << 1;
+        int y = WorldEngine.getY(parentKey) << 1;
+        int z = WorldEngine.getZ(parentKey) << 1;
+        for (int dx = 0; dx < 2; dx++) {
+            for (int dy = 0; dy < 2; dy++) {
+                for (int dz = 0; dz < 2; dz++) {
+                    this.pendingDecParents.remove(WorldEngine.getWorldSectionId(childLvl, x + dx, y + dy, z + dz));
+                }
+            }
+        }
+    }
+
+    private void enqueueDecChild(long parentKey, int lvl, int x, int y, int z) {
+        long childKey = WorldEngine.getWorldSectionId(lvl, x, y, z);
+        synchronized (this) {
+            this.pendingDecParents.put(childKey, parentKey);
+        }
+        this.renderGen.enqueueTask(lvl, x, y, z, this::shouldStillBuild);
     }
 
     private void enqueueChildDeletes(long parentKey) {
