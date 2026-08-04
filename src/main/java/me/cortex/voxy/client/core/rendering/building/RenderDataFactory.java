@@ -12,7 +12,6 @@ import net.minecraft.block.FluidBlock;
 import org.lwjgl.system.MemoryUtil;
 
 import java.lang.reflect.Array;
-import java.util.Arrays;
 
 
 public class RenderDataFactory {
@@ -316,6 +315,8 @@ public class RenderDataFactory {
         // when we are on the other direction
         boolean obtainedOppositeSection0  = false;
         boolean obtainedOppositeSection31 = false;
+        boolean missingOppositeSection0  = false;
+        boolean missingOppositeSection31 = false;
 
 
         for (int primary = 0; primary < 32; primary++) {
@@ -350,9 +351,12 @@ public class RenderDataFactory {
                                     connectedSection.copyDataTo(this.connectedSectionCache);
                                     connectedSection.release();
                                 } else {
-                                    Arrays.fill(this.connectedSectionCache, Mapper.withLight(Mapper.AIR, 15));
+                                    missingOppositeSection0 = true;
                                 }
                                 obtainedOppositeSection0 = true;
+                            }
+                            if (missingOppositeSection0) {
+                                continue;
                             }
                             facingState = this.connectedSectionCache[WorldSection.getIndex(x*(1-aX)+(31*aX), y*(1-aY)+(31*aY), z*(1-aZ)+(31*aZ))];
                         } else {
@@ -376,9 +380,12 @@ public class RenderDataFactory {
                                     connectedSection.copyDataTo(this.connectedSectionCache);
                                     connectedSection.release();
                                 } else {
-                                    Arrays.fill(this.connectedSectionCache, Mapper.withLight(Mapper.AIR, 15));
+                                    missingOppositeSection31 = true;
                                 }
                                 obtainedOppositeSection31 = true;
+                            }
+                            if (missingOppositeSection31) {
+                                continue;
                             }
                             facingState = this.connectedSectionCache[WorldSection.getIndex(x*(1-aX), y*(1-aY), z*(1-aZ))];
                         } else {
