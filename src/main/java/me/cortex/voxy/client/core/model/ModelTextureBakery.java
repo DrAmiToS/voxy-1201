@@ -208,7 +208,8 @@ public class ModelTextureBakery {
             blockEntityModel.renderOut();
         }
 
-        var bb = vc.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_TEXTURE_COLOR);
+        var bb = vc.getBuffer();
+        bb.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_TEXTURE_COLOR);
         if (!renderFluid) {
             renderQuads(bb, state, model, new MatrixStack(), randomValue);
         } else {
@@ -301,7 +302,7 @@ public class ModelTextureBakery {
             for (var quad : quads) {
                 //TODO: mark pixels that have
                 int meta = quad.hasColor()?1:0;
-                builder.quad(stack.peek(), quad, 255f/((meta>>16)&0xff), 255f/((meta>>8)&0xff), 255f/(meta&0xff), 1.0f, 0, 0);
+                builder.quad(stack.peek(), quad, 255f/((meta>>16)&0xff), 255f/((meta>>8)&0xff), 255f/(meta&0xff), 0, 0);
             }
         }
     }

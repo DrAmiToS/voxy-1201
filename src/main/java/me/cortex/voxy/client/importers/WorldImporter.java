@@ -20,7 +20,7 @@ import net.minecraft.world.biome.BiomeKeys;
 import net.minecraft.world.chunk.ChunkNibbleArray;
 import net.minecraft.world.chunk.PalettedContainer;
 import net.minecraft.world.chunk.ReadableContainer;
-import net.minecraft.world.storage.ChunkCompressionFormat;
+import net.minecraft.world.storage.ChunkStreamVersion;
 import org.lwjgl.system.MemoryUtil;
 
 import java.io.*;
@@ -95,7 +95,7 @@ public class WorldImporter {
         };
 
         this.biomeCodec = PalettedContainer.createReadableContainerCodec(
-                biomeRegistry.getIndexedEntries(), biomeRegistry.getEntryCodec(), PalettedContainer.PaletteProvider.BIOME, biomeRegistry.entryOf(BiomeKeys.PLAINS)
+                biomeRegistry.getIndexedEntries(), biomeRegistry.createEntryCodec(), PalettedContainer.PaletteProvider.BIOME, biomeRegistry.entryOf(BiomeKeys.PLAINS)
         );
     }
 
@@ -192,7 +192,7 @@ public class WorldImporter {
                                 if (decompressedData == null) {
                                     System.err.println("Error decompressing chunk data");
                                 } else {
-                                    var nbt = NbtIo.readCompound(decompressedData);
+                                    var nbt = NbtIo.read(decompressedData);
                                     this.importChunkNBT(nbt);
                                 }
                             }
@@ -208,7 +208,7 @@ public class WorldImporter {
     }
 
     private DataInputStream decompress(byte flags, InputStream stream) throws IOException {
-        ChunkCompressionFormat chunkStreamVersion = ChunkCompressionFormat.get(flags);
+        ChunkStreamVersion chunkStreamVersion = ChunkStreamVersion.get(flags);
         if (chunkStreamVersion == null) {
             System.err.println("Chunk has invalid chunk stream version");
             return null;

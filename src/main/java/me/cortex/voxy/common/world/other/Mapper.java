@@ -8,7 +8,6 @@ import net.minecraft.block.Blocks;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtOps;
-import net.minecraft.nbt.NbtSizeTracker;
 import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.util.Pair;
 import net.minecraft.world.biome.Biome;
@@ -290,11 +289,11 @@ public class Mapper {
 
         public static StateEntry deserialize(int id, byte[] data) {
             try {
-                var compound = NbtIo.readCompressed(new ByteArrayInputStream(data), NbtSizeTracker.ofUnlimitedBytes());
+                var compound = NbtIo.readCompressed(new ByteArrayInputStream(data));
                 if (compound.getInt("id") != id) {
                     throw new IllegalStateException("Encoded id != expected id");
                 }
-                BlockState state = BlockState.CODEC.parse(NbtOps.INSTANCE, compound.getCompound("block_state")).getOrThrow();
+                BlockState state = BlockState.CODEC.parse(NbtOps.INSTANCE, compound.getCompound("block_state")).get().orThrow();
                 return new StateEntry(id, state);
             } catch (IOException e) {
                 throw new RuntimeException(e);
@@ -326,7 +325,7 @@ public class Mapper {
 
         public static BiomeEntry deserialize(int id, byte[] data) {
             try {
-                var compound = NbtIo.readCompressed(new ByteArrayInputStream(data), NbtSizeTracker.ofUnlimitedBytes());
+                var compound = NbtIo.readCompressed(new ByteArrayInputStream(data));
                 if (compound.getInt("id") != id) {
                     throw new IllegalStateException("Encoded id != expected id");
                 }

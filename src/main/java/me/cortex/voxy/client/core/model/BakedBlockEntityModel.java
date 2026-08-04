@@ -31,11 +31,11 @@ public class BakedBlockEntityModel {
         }
 
         @Override
-        public VertexConsumer vertex(float x, float y, float z) {
+        public VertexConsumer vertex(double x, double y, double z) {
             this.next();
-            this.cX = x;
-            this.cY = y;
-            this.cZ = z;
+            this.cX = (float) x;
+            this.cY = (float) y;
+            this.cZ = (float) z;
             this.makingVertex = true;
             return this;
         }
@@ -71,7 +71,7 @@ public class BakedBlockEntityModel {
             return this;
         }
 
-        private void next() {
+        public void next() {
             if (this.makingVertex) {
                 this.makingVertex = false;
                 this.vertices.add(new int[]{
@@ -89,6 +89,14 @@ public class BakedBlockEntityModel {
                         .texture(Float.intBitsToFloat(vert[7]), Float.intBitsToFloat(vert[8]));
             }
         }
+
+        @Override
+        public void fixedColor(int red, int green, int blue, int alpha) {
+        }
+
+        @Override
+        public void unfixColor() {
+        }
     }
 
     private final List<BakedVertices> layers;
@@ -99,7 +107,8 @@ public class BakedBlockEntityModel {
     public void renderOut() {
         var vc = Tessellator.getInstance();
         for (var layer : this.layers) {
-            var bb = vc.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_TEXTURE_COLOR);
+            var bb = vc.getBuffer();
+            bb.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_TEXTURE_COLOR);
             if (layer.layer instanceof RenderLayer.MultiPhase mp) {
                 Identifier textureId = mp.phases.texture.getId().orElse(null);
                 if (textureId == null) {

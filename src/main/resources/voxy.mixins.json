@@ -8,15 +8,11 @@
     "minecraft.MixinDebugHud",
     "minecraft.MixinMinecraftClient",
     "minecraft.MixinWorldRenderer",
-    "nvidium.MixinRenderPipeline",
     "sodium.MixinDefaultChunkRenderer",
-    "sodium.MixinRenderSectionManager",
-    "sodium.MixinSodiumWorldRender"
+    "sodium.MixinRenderSectionManager"
   ],
   "injectors": {
     "defaultRequire": 1
   },
-  "mixins": [
-    "chunky.MixinFabricWorld"
-  ]
+  "mixins": []
 }
