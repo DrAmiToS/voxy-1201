@@ -72,8 +72,8 @@ void main() {
 
 
         uint msk = 0;
-        msk |= uint(((meta.cntB      &0xFFFF)!=0) && (relative.y>-1))<<0;
-        msk |= uint((((meta.cntB>>16)&0xFFFF)!=0) && (relative.y<1 ))<<1;
+        msk |= uint((meta.cntB      &0xFFFF)!=0)<<0;
+        msk |= uint(((meta.cntB>>16)&0xFFFF)!=0)<<1;
         msk |= uint(((meta.cntC      &0xFFFF)!=0) && (relative.z>-1))<<2;
         msk |= uint((((meta.cntC>>16)&0xFFFF)!=0) && (relative.z<1 ))<<3;
         msk |= uint(((meta.cntD      &0xFFFF)!=0) && (relative.x>-1))<<4;
