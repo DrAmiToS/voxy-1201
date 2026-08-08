@@ -4,6 +4,7 @@ import it.unimi.dsi.fastutil.Pair;
 import me.cortex.voxy.common.voxelization.VoxelizedSection;
 import me.cortex.voxy.common.voxelization.WorldConversionFactory;
 import me.cortex.voxy.common.world.WorldEngine;
+import me.cortex.voxy.client.config.VoxyConfig;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.text.Text;
@@ -150,6 +151,7 @@ public class VoxelIngestService {
     }
 
     private void writeDiagnostics() {
+        if (!VoxyConfig.CONFIG.diagnosticsEnabled) return;
         long now = System.currentTimeMillis();
         if (now - this.lastDiagnosticTime < 2000) return;
         this.lastDiagnosticTime = now;

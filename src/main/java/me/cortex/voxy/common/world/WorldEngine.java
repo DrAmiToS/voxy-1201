@@ -6,6 +6,7 @@ import me.cortex.voxy.common.world.other.Mapper;
 import me.cortex.voxy.common.world.service.SectionSavingService;
 import me.cortex.voxy.common.world.service.VoxelIngestService;
 import me.cortex.voxy.common.storage.StorageBackend;
+import me.cortex.voxy.client.config.VoxyConfig;
 import net.fabricmc.loader.api.FabricLoader;
 import org.lwjgl.system.MemoryUtil;
 
@@ -157,6 +158,7 @@ public class WorldEngine {
     }
 
     private void writeUpdateDiagnostics() {
+        if (!VoxyConfig.CONFIG.diagnosticsEnabled) return;
         long now = System.currentTimeMillis();
         if (now - this.lastDiagnosticsTime < 2000) return;
         this.lastDiagnosticsTime = now;

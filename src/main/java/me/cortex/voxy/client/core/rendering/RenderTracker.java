@@ -8,6 +8,7 @@ import me.cortex.voxy.client.core.rendering.building.BuiltSection;
 import me.cortex.voxy.client.core.rendering.building.RenderGenerationService;
 import me.cortex.voxy.common.world.WorldEngine;
 import me.cortex.voxy.common.world.WorldSection;
+import me.cortex.voxy.client.config.VoxyConfig;
 import net.fabricmc.loader.api.FabricLoader;
 
 import java.nio.file.Files;
@@ -206,6 +207,7 @@ public class RenderTracker {
     }
 
     private void writeUpdateDiagnostics() {
+        if (!VoxyConfig.CONFIG.diagnosticsEnabled) return;
         long now = System.currentTimeMillis();
         if (now - this.lastDiagnosticsTime < 2000) return;
         this.lastDiagnosticsTime = now;

@@ -12,6 +12,7 @@ import me.cortex.voxy.client.core.rendering.building.BuiltSection;
 import me.cortex.voxy.client.core.rendering.util.DownloadStream;
 import me.cortex.voxy.client.core.rendering.util.UploadStream;
 import me.cortex.voxy.common.world.other.Mapper;
+import me.cortex.voxy.client.config.VoxyConfig;
 import net.minecraft.block.Blocks;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.Camera;
@@ -137,6 +138,7 @@ public abstract class AbstractFarWorldRenderer <T extends Viewport, J extends Ab
     }
 
     private void writeDiagnostics(Camera camera) {
+        if (!VoxyConfig.CONFIG.diagnosticsEnabled) return;
         long now = System.currentTimeMillis();
         if (now - this.lastDiagnosticLogTime < 1000) {
             return;

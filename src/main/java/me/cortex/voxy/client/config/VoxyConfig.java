@@ -24,6 +24,7 @@ public class VoxyConfig {
 
     public boolean enabled = true;
     public boolean ingestEnabled = true;
+    public boolean diagnosticsEnabled = false;
     public int qualityScale = 12;
     public int maxSections = 200_000;
     public int renderDistance = 128;
