@@ -22,4 +22,20 @@ public class MixinRenderSectionManager {
             core.enqueueIngest(world.getChunk(x, z));
         }
     }
+
+    @Inject(method = "onChunkAdded", at = @At("HEAD"))
+    private void injectChunkAdd(int x, int z, CallbackInfo ci) {
+        var core = ((IGetVoxelCore)(world.worldRenderer)).getVoxelCore();
+        if (core != null && VoxyConfig.CONFIG.ingestEnabled) {
+            core.enqueueIngest(world.getChunk(x, z));
+        }
+    }
+
+    @Inject(method = "scheduleRebuild", at = @At("HEAD"))
+    private void injectSectionUpdate(int x, int y, int z, boolean important, CallbackInfo ci) {
+        var core = ((IGetVoxelCore)(world.worldRenderer)).getVoxelCore();
+        if (core != null && VoxyConfig.CONFIG.ingestEnabled) {
+            core.enqueueIngest(world.getChunk(x, z));
+        }
+    }
 }
