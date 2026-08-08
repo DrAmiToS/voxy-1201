@@ -82,7 +82,8 @@ public class VoxelIngestService {
                                 section.getBiomeContainer(),
                                 (x, y, z, state) -> {
                                     if (lighting == null || ((lighting.first() != null && lighting.first().isUninitialized())&&(lighting.second()!=null&&lighting.second().isUninitialized()))) {
-                                        return (byte) 0;
+                                        // Preserve the 1.20.1 port behavior until vanilla lighting is ready.
+                                        return (byte) 0x0f;
                                     } else {
                                         //Lighting is a piece of shit cause its done per face
                                         int block = lighting.first()!=null?Math.min(15,lighting.first().get(x, y, z)):0;
@@ -90,6 +91,7 @@ public class VoxelIngestService {
                                         if (block<state.getLuminance()) {
                                             block = state.getLuminance();
                                         }
+                                        sky = 15-sky;
                                         return (byte) (sky|(block<<4));
                                     }
                                 },
@@ -117,8 +119,10 @@ public class VoxelIngestService {
         var pos = ChunkSectionPos.from(chunk.getPos(), sectionY);
         var bl = blp.getLightSection(pos);
         var sl = slp.getLightSection(pos);
-        if (bl != null) bl = bl.copy();
-        if (sl != null) sl = sl.copy();
+        if (bl == null || bl.isUninitialized()) bl = null;
+        else bl = bl.copy();
+        if (sl == null || sl.isUninitialized()) sl = null;
+        else sl = sl.copy();
         return bl == null && sl == null ? null : Pair.of(bl, sl);
     }
 
