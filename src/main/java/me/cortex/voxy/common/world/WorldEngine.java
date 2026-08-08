@@ -6,10 +6,15 @@ import me.cortex.voxy.common.world.other.Mapper;
 import me.cortex.voxy.common.world.service.SectionSavingService;
 import me.cortex.voxy.common.world.service.VoxelIngestService;
 import me.cortex.voxy.common.storage.StorageBackend;
+import net.fabricmc.loader.api.FabricLoader;
 import org.lwjgl.system.MemoryUtil;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
 import java.util.function.Consumer;
+import java.util.concurrent.atomic.AtomicLong;
 
 //Use an LMDB backend to store the world, use a local inmemory cache for lod sections
 // automatically manages and invalidates sections of the world as needed
@@ -21,6 +26,11 @@ public class WorldEngine {
     public final SectionSavingService savingService;
     private Consumer<WorldSection> dirtyCallback;
     private final int maxMipLevels;
+    private final AtomicLong updateCount = new AtomicLong();
+    private final AtomicLong changedSectionCount = new AtomicLong();
+    private final AtomicLong dirtyCallbackCount = new AtomicLong();
+    private volatile long lastChangedKey;
+    private volatile long lastDiagnosticsTime;
 
 
     public void setDirtyCallback(Consumer<WorldSection> tracker) {
@@ -98,6 +108,7 @@ public class WorldEngine {
     //Marks a section as dirty, enqueuing it for saving and or render data rebuilding
     public void markDirty(WorldSection section) {
         if (this.dirtyCallback != null) {
+            this.dirtyCallbackCount.incrementAndGet();
             this.dirtyCallback.accept(section);
         }
         //TODO: add an option for having synced saving, that is when call enqueueSave, that will instead, instantly
@@ -110,6 +121,7 @@ public class WorldEngine {
     //TODO: move this to auxilery class  so that it can take into account larger than 4 mip levels
     //Executes an update to the world and automatically updates all the parent mip layers up to level 4 (e.g. where 1 chunk section is 1 block big)
     public void insertUpdate(VoxelizedSection section) {//TODO: add a bitset of levels to update and if it should force update
+        this.updateCount.incrementAndGet();
         //The >>1 is cause the world sections size is 32x32x32 vs the 16x16x16 of the voxelized section
         for (int lvl = 0; lvl < this.maxMipLevels; lvl++) {
             var worldSection = this.acquire(lvl, section.x >> (lvl + 1), section.y >> (lvl + 1), section.z >> (lvl + 1));
@@ -130,6 +142,8 @@ public class WorldEngine {
 
             //Need to release the section after using it
             if (didChange) {
+                this.changedSectionCount.incrementAndGet();
+                this.lastChangedKey = worldSection.key;
                 //Mark the section as dirty (enqueuing saving and geometry rebuild) and move to parent mip level
                 this.markDirty(worldSection);
                 worldSection.release();
@@ -138,6 +152,23 @@ public class WorldEngine {
                 worldSection.release();
                 break;
             }
+        }
+        this.writeUpdateDiagnostics();
+    }
+
+    private void writeUpdateDiagnostics() {
+        long now = System.currentTimeMillis();
+        if (now - this.lastDiagnosticsTime < 2000) return;
+        this.lastDiagnosticsTime = now;
+        try {
+            Path path = FabricLoader.getInstance().getGameDir().resolve("logs/voxy-world-updates.log");
+            Files.createDirectories(path.getParent());
+            String line = "updates=" + this.updateCount.get()
+                    + " changed=" + this.changedSectionCount.get()
+                    + " dirtyCallbacks=" + this.dirtyCallbackCount.get()
+                    + " lastKey=" + this.lastChangedKey + System.lineSeparator();
+            Files.writeString(path, line, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+        } catch (Exception ignored) {
         }
     }
 

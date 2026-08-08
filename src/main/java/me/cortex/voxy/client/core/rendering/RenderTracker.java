@@ -8,6 +8,12 @@ import me.cortex.voxy.client.core.rendering.building.BuiltSection;
 import me.cortex.voxy.client.core.rendering.building.RenderGenerationService;
 import me.cortex.voxy.common.world.WorldEngine;
 import me.cortex.voxy.common.world.WorldSection;
+import net.fabricmc.loader.api.FabricLoader;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.util.concurrent.atomic.AtomicLong;
 
 //Tracks active sections, dispatches updates to the build system, everything related to rendering flows through here
 public class RenderTracker {
@@ -19,6 +25,11 @@ public class RenderTracker {
     private final LongSet pendingIncDeletes = new LongOpenHashSet();
     private final Long2LongOpenHashMap pendingDecParents = new Long2LongOpenHashMap();
     private final Long2IntOpenHashMap pendingDecCounts = new Long2IntOpenHashMap();
+    private final AtomicLong updateCount = new AtomicLong();
+    private final AtomicLong activeUpdateCount = new AtomicLong();
+    private final AtomicLong inactiveUpdateCount = new AtomicLong();
+    private volatile long lastUpdateKey;
+    private volatile long lastDiagnosticsTime;
 
 
     public RenderTracker(WorldEngine world, AbstractFarWorldRenderer renderer) {
@@ -168,6 +179,8 @@ public class RenderTracker {
 
     //Called by the world engine when a section gets dirtied
     public void sectionUpdated(WorldSection section) {
+        this.updateCount.incrementAndGet();
+        this.lastUpdateKey = section.key;
         // Invalidate cached meshes even when this LOD level is not currently active.
         // Otherwise a stale parent mesh can reappear when the camera later switches
         // to that level (for example, a tree removed from the world).
@@ -178,14 +191,34 @@ public class RenderTracker {
         this.renderGen.clearCache(section.lvl, section.x, section.y, section.z+1);
 
         if (this.contains(section.key)) {
+            this.activeUpdateCount.incrementAndGet();
             // Neighbor meshes also depend on this section for face occlusion.
             this.renderGen.enqueueTask(section.lvl, section.x, section.y, section.z, this::shouldStillBuild);
             this.renderGen.enqueueTask(section.lvl, section.x-1, section.y, section.z, this::shouldStillBuild);
             this.renderGen.enqueueTask(section.lvl, section.x+1, section.y, section.z, this::shouldStillBuild);
             this.renderGen.enqueueTask(section.lvl, section.x, section.y, section.z-1, this::shouldStillBuild);
             this.renderGen.enqueueTask(section.lvl, section.x, section.y, section.z+1, this::shouldStillBuild);
+        } else {
+            this.inactiveUpdateCount.incrementAndGet();
         }
+        this.writeUpdateDiagnostics();
         //this.renderGen.enqueueTask(section);
+    }
+
+    private void writeUpdateDiagnostics() {
+        long now = System.currentTimeMillis();
+        if (now - this.lastDiagnosticsTime < 2000) return;
+        this.lastDiagnosticsTime = now;
+        try {
+            Path path = FabricLoader.getInstance().getGameDir().resolve("logs/voxy-render-updates.log");
+            Files.createDirectories(path.getParent());
+            String line = "updates=" + this.updateCount.get()
+                    + " active=" + this.activeUpdateCount.get()
+                    + " inactive=" + this.inactiveUpdateCount.get()
+                    + " lastKey=" + this.lastUpdateKey + System.lineSeparator();
+            Files.writeString(path, line, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+        } catch (Exception ignored) {
+        }
     }
 
     //called by the RenderGenerationService about built geometry, the RenderTracker checks if it can use the result (e.g. the LoD hasnt changed/still correct etc)
