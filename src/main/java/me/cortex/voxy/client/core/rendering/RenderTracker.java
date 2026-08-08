@@ -11,7 +11,7 @@ import me.cortex.voxy.common.world.WorldSection;
 
 //Tracks active sections, dispatches updates to the build system, everything related to rendering flows through here
 public class RenderTracker {
-    private static final int DEC_CHILDREN_BEFORE_PARENT_DELETE = 1;
+    private static final int DEC_CHILDREN_BEFORE_PARENT_DELETE = 8;
 
     private RenderGenerationService renderGen;
     private final AbstractFarWorldRenderer renderer;
