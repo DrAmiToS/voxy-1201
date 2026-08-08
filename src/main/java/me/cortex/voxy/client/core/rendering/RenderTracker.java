@@ -168,17 +168,17 @@ public class RenderTracker {
 
     //Called by the world engine when a section gets dirtied
     public void sectionUpdated(WorldSection section) {
-        if (this.contains(section.key)) {
-            //TODO:FIXME: if the section gets updated, that means that its neighbors might need to be updated aswell
-            // (due to block occlusion)
+        // Invalidate cached meshes even when this LOD level is not currently active.
+        // Otherwise a stale parent mesh can reappear when the camera later switches
+        // to that level (for example, a tree removed from the world).
+        this.renderGen.clearCache(section.lvl, section.x, section.y, section.z);
+        this.renderGen.clearCache(section.lvl, section.x-1, section.y, section.z);
+        this.renderGen.clearCache(section.lvl, section.x+1, section.y, section.z);
+        this.renderGen.clearCache(section.lvl, section.x, section.y, section.z-1);
+        this.renderGen.clearCache(section.lvl, section.x, section.y, section.z+1);
 
-            //TODO: FIXME: REBUILDING THE ENTIRE NEIGHBORS when probably only the internal layout changed is NOT SMART
-            this.renderGen.clearCache(section.lvl, section.x, section.y, section.z);
-            this.renderGen.clearCache(section.lvl, section.x-1, section.y, section.z);
-            this.renderGen.clearCache(section.lvl, section.x+1, section.y, section.z);
-            this.renderGen.clearCache(section.lvl, section.x, section.y, section.z-1);
-            this.renderGen.clearCache(section.lvl, section.x, section.y, section.z+1);
-            //TODO: replace this:: with a class cached lambda ref (cause doing this:: still does a lambda allocation)
+        if (this.contains(section.key)) {
+            // Neighbor meshes also depend on this section for face occlusion.
             this.renderGen.enqueueTask(section.lvl, section.x, section.y, section.z, this::shouldStillBuild);
             this.renderGen.enqueueTask(section.lvl, section.x-1, section.y, section.z, this::shouldStillBuild);
             this.renderGen.enqueueTask(section.lvl, section.x+1, section.y, section.z, this::shouldStillBuild);
