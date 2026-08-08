@@ -85,6 +85,9 @@ public class RenderGenerationService {
                     // Never let an older build overwrite the freshly invalidated cache.
                     if (this.meshRevisions.getOrDefault(task.key, 0L) != task.revision) {
                         mesh.free();
+                        // The task may have been removed from the queue before the
+                        // update arrived. Rebuild it with the current revision.
+                        this.requeue(task);
                     } else {
                         this.resultConsumer.accept(mesh.clone());
                         if (!this.meshCache.putMesh(mesh)) {
