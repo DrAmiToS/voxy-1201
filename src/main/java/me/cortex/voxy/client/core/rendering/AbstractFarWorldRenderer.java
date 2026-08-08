@@ -4,6 +4,7 @@ package me.cortex.voxy.client.core.rendering;
 // could maybe tosomething else
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import net.fabricmc.loader.api.FabricLoader;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import me.cortex.voxy.client.core.gl.GlBuffer;
 import me.cortex.voxy.client.core.model.ModelManager;
@@ -26,6 +27,8 @@ import org.lwjgl.system.MemoryUtil;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.concurrent.ConcurrentLinkedDeque;
 
 import static org.lwjgl.opengl.ARBMultiDrawIndirect.glMultiDrawElementsIndirect;
@@ -63,6 +66,7 @@ public abstract class AbstractFarWorldRenderer <T extends Viewport, J extends Ab
 
     private final ConcurrentLinkedDeque<Mapper.StateEntry> blockStateUpdates = new ConcurrentLinkedDeque<>();
     private final ConcurrentLinkedDeque<Mapper.BiomeEntry> biomeUpdates = new ConcurrentLinkedDeque<>();
+    private long lastDiagnosticLogTime;
     public AbstractFarWorldRenderer(J geometry) {
         this.maxSections = geometry.getMaxSections();
         this.uniformBuffer  = new GlBuffer(1024);
@@ -77,6 +81,7 @@ public abstract class AbstractFarWorldRenderer <T extends Viewport, J extends Ab
         this.sx = camera.getBlockPos().getX() >> 5;
         this.sy = camera.getBlockPos().getY() >> 5;
         this.sz = camera.getBlockPos().getZ() >> 5;
+        this.writeDiagnostics(camera);
 
         //TODO: move this to a render function that is only called
         // once per frame when using multi viewport mods
@@ -128,6 +133,29 @@ public abstract class AbstractFarWorldRenderer <T extends Viewport, J extends Ab
         //RenderSystem.setShaderFogColor(1f, 1f, 1f, 0f);
         RenderSystem.setShaderFogEnd(99999999);
         RenderSystem.setShaderFogStart(9999999);
+    }
+
+    private void writeDiagnostics(Camera camera) {
+        long now = System.currentTimeMillis();
+        if (now - this.lastDiagnosticLogTime < 1000) {
+            return;
+        }
+        this.lastDiagnosticLogTime = now;
+        try {
+            Path path = FabricLoader.getInstance().getGameDir().resolve("logs/voxy-diagnostics.log");
+            Files.createDirectories(path.getParent());
+            String line = String.format(
+                    "camera=%.2f,%.2f,%.2f block=%d,%d,%d base=%d,%d,%d worldY=%d..%d sections=%d%n",
+                    camera.getPos().x, camera.getPos().y, camera.getPos().z,
+                    camera.getBlockPos().getX(), camera.getBlockPos().getY(), camera.getBlockPos().getZ(),
+                    this.sx, this.sy, this.sz,
+                    MinecraftClient.getInstance().world.getBottomY(),
+                    MinecraftClient.getInstance().world.getTopY(),
+                    this.geometry.getSectionCount());
+            Files.writeString(path, line, java.nio.file.StandardOpenOption.CREATE,
+                    java.nio.file.StandardOpenOption.APPEND);
+        } catch (Exception ignored) {
+        }
     }
 
     public abstract void renderFarAwayOpaque(T viewport);
