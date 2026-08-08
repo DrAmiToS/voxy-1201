@@ -13,6 +13,7 @@ import net.minecraft.world.chunk.ChunkNibbleArray;
 import net.minecraft.world.chunk.WorldChunk;
 
 import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicLong;
 import java.nio.file.Files;
@@ -24,9 +25,16 @@ public class VoxelIngestService {
     private final Thread[] workers;
 
     private record IngestTask(WorldChunk chunk, int sectionIndex, int sectionY,
-                              Pair<ChunkNibbleArray, ChunkNibbleArray> lighting) {}
+                              Pair<ChunkNibbleArray, ChunkNibbleArray> lighting) {
+        private long key() {
+            return WorldEngine.getWorldSectionId(0, this.chunk.getPos().x, this.sectionY, this.chunk.getPos().z);
+        }
+    }
 
     private final ConcurrentLinkedDeque<IngestTask> ingestQueue = new ConcurrentLinkedDeque<>();
+    // Multiple Sodium rebuild notifications can target the same section before a worker runs.
+    // Keep only the newest snapshot for each section.
+    private final ConcurrentHashMap<Long, IngestTask> pendingTasks = new ConcurrentHashMap<>();
     private final Semaphore ingestCounter = new Semaphore(0);
     private final AtomicLong enqueuedTasks = new AtomicLong();
     private final AtomicLong completedTasks = new AtomicLong();
@@ -54,6 +62,12 @@ public class VoxelIngestService {
             if (!this.running) break;
             try {
                 var task = this.ingestQueue.pop();
+                boolean claimed = this.pendingTasks.remove(task.key(), task);
+                if (!claimed) {
+                    var current = this.pendingTasks.remove(task.key());
+                    if (current == null) continue;
+                    task = current;
+                }
                 var chunk = task.chunk();
                 var section = chunk.getSectionArray()[task.sectionIndex()];
                 var lighting = task.lighting();
@@ -123,9 +137,12 @@ public class VoxelIngestService {
 
     private void enqueueSection(WorldChunk chunk, int sectionIndex, int sectionY) {
         var lighting = captureLighting(chunk, sectionY);
-        this.ingestQueue.add(new IngestTask(chunk, sectionIndex, sectionY, lighting));
+        var task = new IngestTask(chunk, sectionIndex, sectionY, lighting);
+        if (this.pendingTasks.put(task.key(), task) == null) {
+            this.ingestQueue.add(task);
+            this.ingestCounter.release();
+        }
         this.enqueuedTasks.incrementAndGet();
-        this.ingestCounter.release();
     }
 
     private void writeDiagnostics() {
