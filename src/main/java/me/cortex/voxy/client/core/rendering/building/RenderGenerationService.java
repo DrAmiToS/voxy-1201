@@ -18,7 +18,9 @@ import java.util.function.ToIntFunction;
 public class RenderGenerationService {
 
     public interface TaskChecker {boolean check(int lvl, int x, int y, int z);}
-    private record BuildTask(Supplier<WorldSection> sectionSupplier) {}
+    private record BuildTask(long key, int lvl, int x, int y, int z,
+                             TaskChecker checker, long revision,
+                             Supplier<WorldSection> sectionSupplier) {}
 
     private volatile boolean running = true;
     private final Thread[] workers;
@@ -30,6 +32,7 @@ public class RenderGenerationService {
     private final ModelManager modelManager;
     private final Consumer<BuiltSection> resultConsumer;
     private final BuiltSectionMeshCache meshCache = new BuiltSectionMeshCache();
+    private final ConcurrentHashMap<Long, Long> meshRevisions = new ConcurrentHashMap<>();
     private final boolean emitMeshlets;
 
     public RenderGenerationService(WorldEngine world, ModelManager modelManager, int workers, Consumer<BuiltSection> consumer, boolean emitMeshlets) {
@@ -74,16 +77,19 @@ public class RenderGenerationService {
                     }
                     //We need to reinsert the build task into the queue
                     //System.err.println("Render task failed to complete due to un-computed client id");
-                    synchronized (this.taskQueue) {
-                        this.taskQueue.computeIfAbsent(section.key, key->{this.taskCounter.release(); return task;});
-                    }
+                    this.requeue(task);
                 }
                 section.release();
                 if (mesh != null) {
-                    //TODO: if the mesh is null, need to clear the cache at that point
-                    this.resultConsumer.accept(mesh.clone());
-                    if (!this.meshCache.putMesh(mesh)) {
+                    // A section may have changed while this mesh was being built.
+                    // Never let an older build overwrite the freshly invalidated cache.
+                    if (this.meshRevisions.getOrDefault(task.key, 0L) != task.revision) {
                         mesh.free();
+                    } else {
+                        this.resultConsumer.accept(mesh.clone());
+                        if (!this.meshCache.putMesh(mesh)) {
+                            mesh.free();
+                        }
                     }
                 }
             } catch (Exception e) {
@@ -130,7 +136,8 @@ public class RenderGenerationService {
         synchronized (this.taskQueue) {
             this.taskQueue.computeIfAbsent(ikey, key->{
                 this.taskCounter.release();
-                return new BuildTask(()->{
+                long revision = this.meshRevisions.getOrDefault(key, 0L);
+                return new BuildTask(key, lvl, x, y, z, checker, revision, ()->{
                     if (checker.check(lvl, x, y, z)) {
                         return this.world.acquireIfExists(lvl, x, y, z);
                     } else {
@@ -153,7 +160,24 @@ public class RenderGenerationService {
 
     //Resets a chunks cache mesh
     public void clearCache(int lvl, int x, int y, int z) {
-        this.meshCache.clearMesh(WorldEngine.getWorldSectionId(lvl, x, y, z));
+        long key = WorldEngine.getWorldSectionId(lvl, x, y, z);
+        this.meshRevisions.merge(key, 1L, Long::sum);
+        this.meshCache.clearMesh(key);
+    }
+
+    private void requeue(BuildTask task) {
+        synchronized (this.taskQueue) {
+            this.taskQueue.computeIfAbsent(task.key, key -> {
+                this.taskCounter.release();
+                long revision = this.meshRevisions.getOrDefault(key, 0L);
+                return new BuildTask(key, task.lvl, task.x, task.y, task.z, task.checker, revision, () -> {
+                    if (task.checker.check(task.lvl, task.x, task.y, task.z)) {
+                        return this.world.acquireIfExists(task.lvl, task.x, task.y, task.z);
+                    }
+                    return null;
+                });
+            });
+        }
     }
 
     public void removeTask(int lvl, int x, int y, int z) {

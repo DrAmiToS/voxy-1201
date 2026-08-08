@@ -4,6 +4,7 @@ import it.unimi.dsi.fastutil.Pair;
 import me.cortex.voxy.common.voxelization.VoxelizedSection;
 import me.cortex.voxy.common.voxelization.WorldConversionFactory;
 import me.cortex.voxy.common.world.WorldEngine;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.ChunkSectionPos;
@@ -13,6 +14,10 @@ import net.minecraft.world.chunk.WorldChunk;
 
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicLong;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 
 public class VoxelIngestService {
     private volatile boolean running = true;
@@ -23,6 +28,11 @@ public class VoxelIngestService {
 
     private final ConcurrentLinkedDeque<IngestTask> ingestQueue = new ConcurrentLinkedDeque<>();
     private final Semaphore ingestCounter = new Semaphore(0);
+    private final AtomicLong enqueuedTasks = new AtomicLong();
+    private final AtomicLong completedTasks = new AtomicLong();
+    private final AtomicLong failedTasks = new AtomicLong();
+    private volatile String lastTask = "none";
+    private volatile long lastDiagnosticTime;
 
     private final WorldEngine world;
     public VoxelIngestService(WorldEngine world, int workers) {
@@ -48,6 +58,7 @@ public class VoxelIngestService {
                 var section = chunk.getSectionArray()[task.sectionIndex()];
                 var lighting = task.lighting();
                 int i = task.sectionY();
+                this.lastTask = chunk.getPos().x + "," + i + "," + chunk.getPos().z;
                 if (section.isEmpty() && lighting == null) {
                     this.world.insertUpdate(VoxelizedSection.createEmpty(chunk.getPos().x, i, chunk.getPos().z));
                 } else {
@@ -75,10 +86,13 @@ public class VoxelIngestService {
                         WorldConversionFactory.mipSection(csec, this.world.getMapper());
                         this.world.insertUpdate(csec);
                 }
+                this.completedTasks.incrementAndGet();
             } catch (Exception e) {
+                this.failedTasks.incrementAndGet();
                 System.err.println(e);
                 MinecraftClient.getInstance().executeSync(()->MinecraftClient.getInstance().player.sendMessage(Text.literal("Voxy ingester had an exception while executing please check logs and report error")));
             }
+            this.writeDiagnostics();
         }
     }
 
@@ -110,7 +124,25 @@ public class VoxelIngestService {
     private void enqueueSection(WorldChunk chunk, int sectionIndex, int sectionY) {
         var lighting = captureLighting(chunk, sectionY);
         this.ingestQueue.add(new IngestTask(chunk, sectionIndex, sectionY, lighting));
+        this.enqueuedTasks.incrementAndGet();
         this.ingestCounter.release();
+    }
+
+    private void writeDiagnostics() {
+        long now = System.currentTimeMillis();
+        if (now - this.lastDiagnosticTime < 2000) return;
+        this.lastDiagnosticTime = now;
+        try {
+            Path path = FabricLoader.getInstance().getGameDir().resolve("logs/voxy-ingest.log");
+            Files.createDirectories(path.getParent());
+            String line = "enqueued=" + this.enqueuedTasks.get()
+                    + " completed=" + this.completedTasks.get()
+                    + " failed=" + this.failedTasks.get()
+                    + " pending=" + this.ingestCounter.availablePermits()
+                    + " last=" + this.lastTask + System.lineSeparator();
+            Files.writeString(path, line, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+        } catch (Exception ignored) {
+        }
     }
 
     public int getTaskCount() {
