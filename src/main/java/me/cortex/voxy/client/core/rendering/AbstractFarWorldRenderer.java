@@ -75,7 +75,7 @@ public abstract class AbstractFarWorldRenderer <T extends Viewport, J extends Ab
         this.frustum = frustum.frustumIntersection;
 
         this.sx = camera.getBlockPos().getX() >> 5;
-        this.sy = clampSectionY(camera.getBlockPos().getY() >> 5);
+        this.sy = camera.getBlockPos().getY() >> 5;
         this.sz = camera.getBlockPos().getZ() >> 5;
 
         //TODO: move this to a render function that is only called
@@ -128,16 +128,6 @@ public abstract class AbstractFarWorldRenderer <T extends Viewport, J extends Ab
         //RenderSystem.setShaderFogColor(1f, 1f, 1f, 0f);
         RenderSystem.setShaderFogEnd(99999999);
         RenderSystem.setShaderFogStart(9999999);
-    }
-
-    private static int clampSectionY(int sectionY) {
-        var world = MinecraftClient.getInstance().world;
-        if (world == null) {
-            return sectionY;
-        }
-        int minSectionY = world.getBottomY() >> 5;
-        int maxSectionY = (world.getTopY() - 1) >> 5;
-        return Math.max(minSectionY, Math.min(maxSectionY, sectionY));
     }
 
     public abstract void renderFarAwayOpaque(T viewport);
