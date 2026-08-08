@@ -35,7 +35,7 @@ public class MixinRenderSectionManager {
     private void injectSectionUpdate(int x, int y, int z, boolean important, CallbackInfo ci) {
         var core = ((IGetVoxelCore)(world.worldRenderer)).getVoxelCore();
         if (core != null && VoxyConfig.CONFIG.ingestEnabled) {
-            core.enqueueIngest(world.getChunk(x, z));
+            core.enqueueIngest(world.getChunk(x, z), y);
         }
     }
 }

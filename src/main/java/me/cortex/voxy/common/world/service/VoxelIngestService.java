@@ -10,10 +10,7 @@ import net.minecraft.util.math.ChunkSectionPos;
 import net.minecraft.world.LightType;
 import net.minecraft.world.chunk.ChunkNibbleArray;
 import net.minecraft.world.chunk.WorldChunk;
-import net.minecraft.world.chunk.light.LightStorage;
 
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.Semaphore;
 
@@ -21,10 +18,11 @@ public class VoxelIngestService {
     private volatile boolean running = true;
     private final Thread[] workers;
 
-    private final ConcurrentLinkedDeque<WorldChunk> ingestQueue = new ConcurrentLinkedDeque<>();
-    private final Semaphore ingestCounter = new Semaphore(0);
+    private record IngestTask(WorldChunk chunk, int sectionIndex, int sectionY,
+                              Pair<ChunkNibbleArray, ChunkNibbleArray> lighting) {}
 
-    private final ConcurrentHashMap<Long, Pair<ChunkNibbleArray, ChunkNibbleArray>> captureLightMap = new ConcurrentHashMap<>(1000,0.75f, 7);
+    private final ConcurrentLinkedDeque<IngestTask> ingestQueue = new ConcurrentLinkedDeque<>();
+    private final Semaphore ingestCounter = new Semaphore(0);
 
     private final WorldEngine world;
     public VoxelIngestService(WorldEngine world, int workers) {
@@ -45,21 +43,21 @@ public class VoxelIngestService {
             this.ingestCounter.acquireUninterruptibly();
             if (!this.running) break;
             try {
-                var chunk = this.ingestQueue.pop();
-                int i = chunk.getBottomSectionCoord() - 1;
-                for (var section : chunk.getSectionArray()) {
-                    i++;
-                    var lighting = this.captureLightMap.remove(ChunkSectionPos.from(chunk.getPos(), i).asLong());
-                    if (section.isEmpty()) {
-                        this.world.insertUpdate(VoxelizedSection.createEmpty(chunk.getPos().x, i, chunk.getPos().z));
-                    } else {
+                var task = this.ingestQueue.pop();
+                var chunk = task.chunk();
+                var section = chunk.getSectionArray()[task.sectionIndex()];
+                var lighting = task.lighting();
+                int i = task.sectionY();
+                if (section.isEmpty() && lighting == null) {
+                    this.world.insertUpdate(VoxelizedSection.createEmpty(chunk.getPos().x, i, chunk.getPos().z));
+                } else {
                         VoxelizedSection csec = WorldConversionFactory.convert(
                                 this.world.getMapper(),
                                 section.getBlockStateContainer(),
                                 section.getBiomeContainer(),
                                 (x, y, z, state) -> {
                                     if (lighting == null || ((lighting.first() != null && lighting.first().isUninitialized())&&(lighting.second()!=null&&lighting.second().isUninitialized()))) {
-                                        return (byte) 0x0f;
+                                        return (byte) 0;
                                     } else {
                                         //Lighting is a piece of shit cause its done per face
                                         int block = lighting.first()!=null?Math.min(15,lighting.first().get(x, y, z)):0;
@@ -67,7 +65,6 @@ public class VoxelIngestService {
                                         if (block<state.getLuminance()) {
                                             block = state.getLuminance();
                                         }
-                                        sky = 15-sky;//This is cause sky light is inverted which saves memory when saving empty sections
                                         return (byte) (sky|(block<<4));
                                     }
                                 },
@@ -77,7 +74,6 @@ public class VoxelIngestService {
                         );
                         WorldConversionFactory.mipSection(csec, this.world.getMapper());
                         this.world.insertUpdate(csec);
-                    }
                 }
             } catch (Exception e) {
                 System.err.println(e);
@@ -86,39 +82,34 @@ public class VoxelIngestService {
         }
     }
 
-    private static void fetchLightingData(Map<Long, Pair<ChunkNibbleArray, ChunkNibbleArray>> out, WorldChunk chunk) {
+    private static Pair<ChunkNibbleArray, ChunkNibbleArray> captureLighting(WorldChunk chunk, int sectionY) {
         var lightingProvider = chunk.getWorld().getLightingProvider();
         var blp = lightingProvider.get(LightType.BLOCK);
         var slp = lightingProvider.get(LightType.SKY);
-
-        int i = chunk.getBottomSectionCoord() - 1;
-        for (var section : chunk.getSectionArray()) {
-            i++;
-            if (section == null) continue;
-            if (section.isEmpty()) continue;
-            var pos = ChunkSectionPos.from(chunk.getPos(), i);
-            var bl = blp.getLightSection(pos);
-            if (!(bl == null || bl.isUninitialized())) {
-                bl = bl.copy();
-            } else {
-                bl = null;
-            }
-            var sl = slp.getLightSection(pos);
-            if (!(sl == null || sl.isUninitialized())) {
-                sl = sl.copy();
-            } else {
-                sl = null;
-            }
-            if (bl == null && sl == null) {
-                continue;
-            }
-            out.put(pos.asLong(), Pair.of(bl, sl));
-        }
+        var pos = ChunkSectionPos.from(chunk.getPos(), sectionY);
+        var bl = blp.getLightSection(pos);
+        var sl = slp.getLightSection(pos);
+        if (bl != null) bl = bl.copy();
+        if (sl != null) sl = sl.copy();
+        return bl == null && sl == null ? null : Pair.of(bl, sl);
     }
 
     public void enqueueIngest(WorldChunk chunk) {
-        fetchLightingData(this.captureLightMap, chunk);
-        this.ingestQueue.add(chunk);
+        int i = chunk.getBottomSectionCoord();
+        for (int sectionIndex = 0; sectionIndex < chunk.getSectionArray().length; sectionIndex++, i++) {
+            this.enqueueSection(chunk, sectionIndex, i);
+        }
+    }
+
+    public void enqueueIngest(WorldChunk chunk, int sectionY) {
+        int sectionIndex = sectionY - chunk.getBottomSectionCoord();
+        if (sectionIndex < 0 || sectionIndex >= chunk.getSectionArray().length) return;
+        this.enqueueSection(chunk, sectionIndex, sectionY);
+    }
+
+    private void enqueueSection(WorldChunk chunk, int sectionIndex, int sectionY) {
+        var lighting = captureLighting(chunk, sectionY);
+        this.ingestQueue.add(new IngestTask(chunk, sectionIndex, sectionY, lighting));
         this.ingestCounter.release();
     }
 

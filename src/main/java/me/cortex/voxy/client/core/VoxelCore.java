@@ -135,6 +135,10 @@ public class VoxelCore {
         this.world.ingestService.enqueueIngest(worldChunk);
     }
 
+    public void enqueueIngest(WorldChunk worldChunk, int sectionY) {
+        this.world.ingestService.enqueueIngest(worldChunk, sectionY);
+    }
+
     boolean firstTime = true;
     public void renderSetup(Frustum frustum, Camera camera) {
         if (this.firstTime) {
