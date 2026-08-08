@@ -79,7 +79,8 @@ public abstract class AbstractFarWorldRenderer <T extends Viewport, J extends Ab
         this.frustum = frustum.frustumIntersection;
 
         this.sx = camera.getBlockPos().getX() >> 5;
-        this.sy = camera.getBlockPos().getY() >> 5;
+        var world = MinecraftClient.getInstance().world;
+        this.sy = world == null ? camera.getBlockPos().getY() >> 5 : world.getBottomY() >> 5;
         this.sz = camera.getBlockPos().getZ() >> 5;
         this.writeDiagnostics(camera);
 
